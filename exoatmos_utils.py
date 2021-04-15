@@ -569,7 +569,7 @@ def reduce_spectra(spectra, transit, mask_type='out_transit', fit_type="constant
     else :
         sub_flux_base = 1.0
     
-    for order in range(spectra['NORDERS']) :
+    for order in range(49) :
         
         # 1st pass to build template for each order and subtract out all spectra by template
         order_template = calculate_template(spectra["flux"][order], wl=spectra["wl"][order], mask=transit[mask_type], fit=True, fit_type=fit_type, median=combine_by_median, subtract=True, sub_flux_base=sub_flux_base, verbose=False, plot=False)
@@ -852,8 +852,8 @@ def build_exoatmos_model(model, template, spectra, planet, transit, wl0=950, wlf
     
     loc = {}
     
-    bjd = spectra["bjd"]
-    berv = spectra["berv"]
+    bjd = spectra["bjds"]
+    berv = spectra["bervs"]
     
     wl, transmission_model = [], []
     masks = []
@@ -918,8 +918,8 @@ def build_exoatmos_model(model, template, spectra, planet, transit, wl0=950, wlf
             wl.append(np.array([]))
             transmission_model.append(np.array([]))
 
-    loc['bjd'] = bjd
-    loc['berv'] = berv
+    loc['bjds'] = bjd
+    loc['bervs'] = berv
     
     loc['wl_masks'] = masks
     loc['wl'] = wl
@@ -964,10 +964,10 @@ def run_HeI_analysis(template, spectra, planet, transit, model_baseline=1.0, ver
     
     loc = {}
     
-    bjd = spectra["bjd"]
-    berv = spectra["berv"]
-    rvs = spectra["rv"]
-    rverrs = spectra["rverr"]
+    bjd = spectra["bjds"]
+    berv = spectra["bervs"]
+    rvs = spectra["rvs"]
+    rverrs = spectra["rverrs"]
     
     model = HeI_nIR_triplet_model(model_baseline=model_baseline, plot=False)
     
@@ -1045,8 +1045,8 @@ def run_HeI_analysis(template, spectra, planet, transit, model_baseline=1.0, ver
         #plot_2d(wl, bjd, star_models, transit=transit, cmap="plasma")
 
 
-    loc['bjd'] = bjd
-    loc['berv'] = berv
+    loc['bjds'] = bjd
+    loc['bervs'] = berv
     loc['wl'] = wl
 
     loc['planet_model'] = planet_models
@@ -1064,10 +1064,10 @@ def compute_ccf(model, template, spectra, transit, planet, v0=-20., vf=20., nvel
     loc['wlf'] = wlf
     loc['use_observed_rvs'] = use_observed_rvs
     
-    bjd = spectra["bjd"]
-    berv = spectra["berv"]
+    bjd = spectra["bjds"]
+    berv = spectra["bervs"]
     if use_observed_rvs :
-        rvs = spectra["rv"]
+        rvs = spectra["rvs"]
     else :
         sys_rv = planet['params'].gamma.value
         rvs = np.full_like(bjd, sys_rv)
@@ -1188,9 +1188,9 @@ def compute_ccf(model, template, spectra, transit, planet, v0=-20., vf=20., nvel
 
 def simulate_data(model, template, spectra, transit, planet, model_baseline = 0.0, scale=1.0, use_observed_rvs=False, ref_frame='observer', kp=0, plot=False, verbose=False) :
     
-    bjd = spectra["bjd"]
-    berv = spectra["berv"]
-    rvs = spectra["rv"]
+    bjd = spectra["bjds"]
+    berv = spectra["bervs"]
+    rvs = spectra["rvs"]
 
     #planet_rvs = np.array(planet['orbit'].get_relative_velocity(bjd)[2].eval() * (696340./(24.*60.*60.)))
     planet_rvs = exoplanetlib.planet_rv(transit['phases'], planet['Kp'])
