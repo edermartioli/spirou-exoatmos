@@ -10,9 +10,11 @@
     
     Simple usage example:
     
-    python exoatmos_pipeline.py --pattern=Data/HD189733/*e.fits --rvfile="/Users/eder/spirou-tools/spirou-exoatmos/Data/HD189733/HD189733.rdb" --exoplanet="HD 189733 b" --model_source="/Users/eder/spirou-tools/spirou-exoatmos/hd189733_atmoslib/db.json"    
+    python exoatmos_pipeline.py --pattern=Data/HD189733/*e.fits --rvfile="/Users/eder/spirou-tools/spirou-exoatmos/Data/HD189733/HD189733.rdb" --exoplanet="HD 189733 b" --model_source="/Users/eder/spirou-tools/spirou-exoatmos/hd189733_atmoslib/db.json"
     
     python exoatmos_pipeline.py --pattern=../Data/HD189733_transit-01/*e.fits --rvfile=../Data/HD189733_transit-01/HD189733_t1-K2mask-filtered_ccf.rdb --exoplanet="HD 189733 b" --model_source="/Users/eder/spirou-tools/spirou-exoatmos/hd189733_atmoslib/db.json" --mask_type="out_transit" -pv
+    
+    python exoatmos_pipeline.py --pattern=Data/HD189733/*e.fits --rvfile="/Users/eder/spirou-tools/spirou-exoatmos/Data/HD189733/HD189733.rdb" --exoplanet="HD 189733 b" --model_source="/Users/eder/spirou-tools/spirou-exoatmos/hd189733_atmoslib/db.json" -vp
     """
 
 __version__ = "1.0"
@@ -30,6 +32,7 @@ import spiroulib
 import exoatmos_utils
 import exoplanetlib
 import glob
+import reduc_lib
 
 parser = OptionParser()
 parser.add_option("-i", "--pattern", dest="pattern", help="Input data pattern",type='string',default="")
@@ -66,10 +69,28 @@ print("******************************")
 print("STEP 1: Load SPIRou data ...")
 print("******************************")
 # Load data from list of input spectra
-#spectra = spiroulib.load_array_of_1D_spectra(inputdata, verbose=False)
-array_of_spectra = spiroulib.load_array_of_spirou_spectra(inputdata, flatten_data_arrays=False, rvfile=options.rvfile, remove_blaze=True, verbose=True, plot=False)
-spectra = spiroulib.get_spectral_data(array_of_spectra, verbose=True)
+array_of_spectra = reduc_lib.load_array_of_spirou_spectra(inputdata, correct_blaze=True, apply_berv=True, verbose=options.verbose)
+# Then load data into order vectors -- it is more efficient to work the reduction order-by-order
+spectra = reduc_lib.get_spectral_data(array_of_spectra, verbose=options.verbose)
 
+bjds = spectra["bjds"]
+airmass = spectra["airmasses"]
+#plt.plot(bjds, airmass)
+#plt.show()
+
+order = 35
+fluxes = spectra["fluxes"]
+wl = spectra["waves"]
+
+for order in range(49) :
+    for i in range(len(bjds)) :
+        plt.plot(wl[order][i], fluxes[order][i])
+
+plt.xlabel("Wavelength [nm]")
+plt.ylabel("Flux")
+plt.show()
+
+exit()
 
 print("******************************")
 print("STEP 2: Load exoplanet parameters and calculate transit window function ...")
@@ -79,7 +100,7 @@ planet = exoplanetlib.exoplanet(exoplanet=options.exoplanet)
 #sample_of_hotjupiters = exoplanetlib.sample_of_exoplanets(min_mass=0.2, max_mass=10., min_per=0.5, max_per=15., plot=True)
 
 # Calculate transit window function
-transit = exoplanetlib.calculate_transit_window(planet, spectra["bjd"], exptime=array_of_spectra['spectra'][0]['exptime'], verbose=False, plot_flux=False, plot=False)
+transit = exoplanetlib.calculate_transit_window(planet, spectra["bjds"], exptime=array_of_spectra['spectra'][0]['exptime'], verbose=False, plot_flux=False, plot=False)
 print("Transit starts in exp {0} and ends in exp {1}".format(transit["ind_ini"],transit["ind_end"]))
 
 
@@ -89,8 +110,11 @@ print("******************************")
 #mask_type='all' or 'out_transit'
 mask_type=options.mask_type
 #mask_type='all'
-template = exoatmos_utils.reduce_spectra(spectra, transit, mask_type=mask_type, fit_type="quadratic", nsig_clip=4.0, combine_by_median=options.median_combine, airmass_detrend=options.airmass_detrend, pca_cleaning=options.pca_cleaning, subtract=True, verbose=True, plot=False, output="")
+#template = exoatmos_utils.reduce_spectra(spectra, transit, mask_type=mask_type, fit_type="quadratic", nsig_clip=4.0, combine_by_median=options.median_combine, airmass_detrend=options.airmass_detrend, pca_cleaning=options.pca_cleaning, subtract=True, verbose=True, plot=False, output="")
 
+template = reduc_lib.reduce_spectra(spectra, mask=transit[mask_type], nsig_clip=4., combine_by_median=True, subtract=False, fluxkey="fluxes", fluxerrkey="fluxerrs", wavekey="wl", update_spectra=True, plot=False, verbose=options.verbose)
+
+exit()
 # The process above may still retain some stellar signal, since it's not taking into
 # account the rv shifts due to stellar movements with respect to the observer
 
@@ -98,7 +122,7 @@ print("******************************")
 print("STEP 4: Running analysis on each species ...")
 print("******************************")
 
-HeI_analysis = False
+HeI_analysis = True
 if HeI_analysis :
     print("******************************")
     print("STEP 4.1: He I triplet ...")
@@ -110,9 +134,9 @@ if HeI_analysis :
     HeI_simulated_data = exoatmos_utils.simulate_data(HeI_model, template, spectra, transit, planet, model_baseline = 1.0, scale=0.1, plot=False, verbose=True)
     
     # plot simulated data
-    exoatmos_utils.plot_2Dtime_series(HeI_simulated_data, spectra["bjd"], wl0=1083.0, wlf=1083.8, transit=transit)
+    exoatmos_utils.plot_2Dtime_series(HeI_simulated_data, spectra["bjds"], wl0=1083.0, wlf=1083.8, transit=transit)
     
-    exoatmos_utils.plot_2Dtime_series(template, spectra["bjd"], wl0=1083.0, wlf=1083.8, transit=transit)
+    exoatmos_utils.plot_2Dtime_series(template, spectra["bjds"], wl0=1083.0, wlf=1083.8, transit=transit)
     
     # run ccf on simulated data
     ccf_HeI_simulated = exoatmos_utils.compute_ccf(HeI_model, HeI_simulated_data, spectra, transit, planet, v0=-100., vf=100., nvels=201, wl0=1082.0, wlf=1084., use_observed_rvs=True, ref_frame='star', plot=True)
@@ -123,6 +147,8 @@ if HeI_analysis :
     kp_v0_ccf_HeI = exoatmos_utils.compute_ccf_kp_v0_map(HeI_model, template, spectra, transit, planet, wl0=1082.0, wlf=1084., kp_range=100., n_kp=20, v0_range=80., n_v0=121, use_observed_rvs=True, plot=True, verbose=True)
     #exit()
     #HeI_model = exoatmos_utils.run_HeI_analysis(template, spectra, planet, transit, model_baseline=1.0, verbose=True, plot=True)
+
+exit()
 
 H2O_analysis = True
 
@@ -150,10 +176,10 @@ if H2O_analysis :
     #wl0, wlf = 2100., 2290.
 
     # plot simulated data
-    #exoatmos_utils.plot_2Dtime_series(simulated_data, spectra["bjd"], wl0=wl0, wlf=wlf, transit=transit)
+    #exoatmos_utils.plot_2Dtime_series(simulated_data, spectra["bjds"], wl0=wl0, wlf=wlf, transit=transit)
     
     # plot simulated data
-    exoatmos_utils.plot_2Dtime_series(template, spectra["bjd"], wl0=wl0, wlf=wlf, transit=transit)
+    exoatmos_utils.plot_2Dtime_series(template, spectra["bjds"], wl0=wl0, wlf=wlf, transit=transit)
     
     # run CCF on simulated data
     #simul_ccf = exoatmos_utils.compute_ccf(model, simulated_data, spectra, transit, planet, v0=-40., vf=40., nvels=121, wl0=wl0, wlf=wlf, ref_frame='star', verbose=True, plot=True)
@@ -184,9 +210,9 @@ print("******************************")
 plot_lines = False
 if plot_lines :
     #plot He I line
-    exoatmos_utils.plot_2Dtime_series(template, spectra["bjd"], wl0=1083.0, wlf=1083.8, transit=transit)
+    exoatmos_utils.plot_2Dtime_series(template, spectra["bjds"], wl0=1083.0, wlf=1083.8, transit=transit)
     #plot K strong lines
-    exoatmos_utils.plot_2Dtime_series(template, spectra["bjd"], wl0=1168.8, wlf=1169.4, transit=transit)
-    exoatmos_utils.plot_2Dtime_series(template, spectra["bjd"], wl0=1176.4, wlf=1177.6, transit=transit)
+    exoatmos_utils.plot_2Dtime_series(template, spectra["bjds"], wl0=1168.8, wlf=1169.4, transit=transit)
+    exoatmos_utils.plot_2Dtime_series(template, spectra["bjds"], wl0=1176.4, wlf=1177.6, transit=transit)
     # Carbon band heads
-    exoatmos_utils.plot_2Dtime_series(template, spectra["bjd"], wl0=2290.0, wlf=2293.5, transit=transit)
+    exoatmos_utils.plot_2Dtime_series(template, spectra["bjds"], wl0=2290.0, wlf=2293.5, transit=transit)
