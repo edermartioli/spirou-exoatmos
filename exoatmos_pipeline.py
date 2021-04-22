@@ -78,7 +78,7 @@ airmass = spectra["airmasses"]
 #plt.plot(bjds, airmass)
 #plt.show()
 
-order = 35
+order = 34
 fluxes = spectra["fluxes"]
 wl = spectra["waves"]
 
